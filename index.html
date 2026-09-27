@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa Rodoviário Brasil — V5 Corrigida</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#f6f8fb;--card:#fff;--ink:#16202a;--muted:#607080;--line:#d9e1e8;--accent:#1769aa;--warn:#b76e00;--danger:#b42318;--ok:#18794e}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:14px 18px;background:#102a43;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:20px;margin:0}.badge{font-size:12px;background:#244b6d;padding:6px 9px;border-radius:999px}
+.tabs{display:flex;gap:6px;padding:10px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1000}
+.tab{border:1px solid var(--line);background:#fff;padding:9px 13px;border-radius:9px;cursor:pointer;font-weight:700}.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.panel{display:none;padding:12px}.panel.active{display:block}
+.layout{display:grid;grid-template-columns:360px 1fr;min-height:calc(100vh - 120px)}aside{background:#fff;border-right:1px solid var(--line);padding:12px;overflow:auto}
+#map{height:calc(100vh - 120px);min-height:620px}.field{margin:8px 0}.field label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+input,select,button{width:100%;padding:9px;border:1px solid #cbd5df;border-radius:8px;font-size:14px}button{cursor:pointer;background:#1769aa;color:#fff;border-color:#1769aa;font-weight:700}.secondary{background:#fff;color:#1769aa}.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0}.muted{color:var(--muted);font-size:12px}.stat{font-size:18px;font-weight:800}.pill{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:800;margin:2px;background:#eef3f7}.pill.warn{background:#fff1d6;color:#8a5600}.pill.danger{background:#ffe1de;color:#a51f16}.pill.ok{background:#dcf6e8;color:#146c43}
+#routeMap{height:65vh;min-height:520px}.scroll{max-height:360px;overflow:auto}.source{font-size:11px;color:#68798a}
+.leaflet-popup-content{line-height:1.35}.toolbar{display:flex;gap:6px;flex-wrap:wrap}.toolbar button{width:auto}
+@media(max-width:900px){.layout{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}#map{height:60vh;min-height:480px}}
+</style>
+</head>
+<body>
+<header><h1>🛣️ Mapa Rodoviário Brasil — V5 Corrigida</h1><span class="badge">Online • nacional • GPS • sem voz</span></header>
+<div class="tabs">
+<button class="tab active" data-tab="mapPanel">🗺️ Mapa nacional</button>
+<button class="tab" data-tab="routePanel">📍 Rota A → B</button>
+<button class="tab" data-tab="tirePanel">🛞 Borracharias</button>
+</div>
+
+<section id="mapPanel" class="panel active">
+<div class="layout">
+<aside>
+<div class="card">
+<b>Pesquisa</b>
+<div class="field"><label>Local, município, endereço ou rodovia</label><input id="searchBox" placeholder="Ex.: Natal, RN"></div>
+<button id="searchBtn">Pesquisar no mapa</button>
+<div class="toolbar" style="margin-top:7px">
+<button class="secondary" id="centerGpsBtn">🎯 Centralizar no GPS</button>
+<button class="secondary" id="useGpsMainBtn">📍 Usar minha localização</button>
+</div>
+</div>
+<div class="card">
+<b>Camadas online</b>
+<label><input type="checkbox" id="roadsChk" checked> Rodovias principais OSM</label>
+<label><input type="checkbox" id="shopsChk" checked> Borracharias/pneus OSM</label>
+<label><input type="checkbox" id="hazardsChk"> Perigos/hazards OSM</label>
+<label><input type="checkbox" id="restaurantsChk"> Restaurantes OSM</label>
+<label><input type="checkbox" id="weatherChk"> Clima no centro do mapa</label>
+</div>
+<div class="card">
+<b>Legenda</b>
+<div><span class="pill ok">🛞</span> Borracharia/pneus</div>
+<div><span class="pill warn">⚠️</span> Alerta meteorológico derivado da previsão</div>
+<div><span class="pill danger">⛈️</span> Condição meteorológica severa</div>
+</div>
+<div class="card muted">
+<b>V5 corrigida:</b> navegação por mapa e GPS, sem comandos, instruções ou dados de voz.<br><br>
+<b>Fontes:</b> OpenStreetMap/Overpass, Open-Meteo, OSRM, PRF/DNIT (quando disponíveis na V2).<br><br>
+Os dados de telefone e horário dependem do estabelecimento ter essas etiquetas cadastradas no OpenStreetMap. O site não inventa informações ausentes.
+</div>
+</aside><main><div id="map"></div></main>
+</div>
+</section>
+
+<section id="routePanel" class="panel">
+<div class="layout">
+<aside>
+<div class="card">
+<b>Calcular rota</b>
+<div class="field"><label>Local A</label><input id="from" placeholder="Ex.: Natal, RN"></div>
+<div class="field"><label>Local B</label><input id="to" placeholder="Ex.: Recife, PE"></div>
+<button id="routeBtn">Calcular rota A → B</button>
+<div class="toolbar" style="margin-top:7px">
+<button id="startTripBtn" disabled>▶️ Iniciar trajeto</button>
+<button class="secondary" id="centerRouteGpsBtn">🎯 Centralizar GPS</button>
+<button class="secondary" id="useGpsAsABtn">📍 GPS como A</button>
+<button class="secondary" id="swapBtn">↔ Inverter A/B</button>
+<button class="secondary" id="routeClear">Limpar</button>
+</div>
+<div id="tripStatus" class="muted" style="margin-top:7px">Calcule a rota para habilitar o início do trajeto.</div>
+</div>
+<div id="routeSummary" class="card"><span class="muted">Informe origem e destino para calcular.</span></div>
+<div class="card"><b>🌦️ Alertas no caminho</b><div id="weatherAlerts" class="scroll muted">Ainda não calculado.</div></div>
+<div class="card"><b>🛞 Borracharias próximas à rota</b><div id="routeShops" class="scroll muted">Será preenchido após a rota.</div></div>
+<div class="card"><b>⚠️ Avisos oficiais</b><p class="muted">Para avisos meteorológicos oficiais, consulte o INMET. A V3 também cruza a rota com previsão meteorológica por pontos.</p><a href="https://avisos.inmet.gov.br/" target="_blank" rel="noopener">Abrir Avisos INMET</a></div>
+</aside><main><div id="routeMap"></div></main>
+</div>
+</section>
+
+<section id="tirePanel" class="panel">
+<div class="card">
+<h3>🛞 Borracharias cadastradas online</h3>
+<p>Esta aba consulta estabelecimentos mapeados no OpenStreetMap na área visível do mapa. Não é uma base fechada: a lista pode crescer conforme novos estabelecimentos são cadastrados pelos colaboradores.</p>
+<div class="row"><button id="findShops">Buscar na área atual</button><button class="secondary" id="fitBrazil">Voltar ao Brasil</button></div>
+<div id="shopList" class="scroll" style="margin-top:10px"></div>
+</div>
+</section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const BR_BOUNDS=[[-33.75,-73.99],[5.27,-34.79]];
+const OVERPASS='https://overpass-api.de/api/interpreter';
+const NOMINATIM='https://nominatim.openstreetmap.org/search';
+const OSRM='https://router.project-osrm.org/route/v1/driving';
+const WEATHER='https://api.open-meteo.com/v1/forecast';
+
+const map=L.map('map').fitBounds(BR_BOUNDS);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
+const routeMap=L.map('routeMap').fitBounds(BR_BOUNDS);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(routeMap);
+
+let roadsLayer=L.layerGroup().addTo(map), shopsLayer=L.layerGroup().addTo(map), hazardsLayer=L.layerGroup(), restaurantsLayer=L.layerGroup(), weatherLayer=L.layerGroup();
+let routeLayer=L.layerGroup().addTo(routeMap), routeShopLayer=L.layerGroup().addTo(routeMap);
+let lastRoute=null, shopCache=[], tripWatchId=null, tripMarker=null, tripActive=false;
+
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function fmtKm(m){return (m/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+' km'}
+function fmtTime(sec){let h=Math.floor(sec/3600),m=Math.round((sec%3600)/60);return (h?h+' h ':'')+m+' min'}
+function debounce(fn,ms){let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>fn(...a),ms)}}
+function icon(emoji){return L.divIcon({className:'',html:'<div style="font-size:25px">'+emoji+'</div>',iconSize:[28,28],iconAnchor:[14,14]})}
+
+async function geocode(q){
+ const u=new URL(NOMINATIM);u.searchParams.set('q',q+', Brasil');u.searchParams.set('format','jsonv2');u.searchParams.set('limit','1');u.searchParams.set('countrycodes','br');
+ const r=await fetch(u,{headers:{'Accept-Language':'pt-BR'}});
+ if(!r.ok)throw Error('Falha no geocodificador');
+ const a=await r.json(); if(!a.length)throw Error('Local não encontrado: '+q);
+ return {lat:+a[0].lat,lon:+a[0].lon,name:a[0].display_name};
+}
+async function overpass(query){
+ const r=await fetch(OVERPASS,{method:'POST',body:query});
+ if(!r.ok)throw Error('Overpass indisponível no momento');
+ return r.json();
+}
+function elementLatLon(e){return e.type==='node'?[e.lat,e.lon]:[e.center?.lat,e.center?.lon]}
+function osmUrl(e){return `https://www.openstreetmap.org/${e.type}/${e.id}`}
+
+async function loadRoads(){
+ if(!document.getElementById('roadsChk').checked){roadsLayer.clearLayers();return}
+ if(map.getZoom()<6){roadsLayer.clearLayers();return}
+ const b=map.getBounds(), q=`[out:json][timeout:25];way["highway"~"^(motorway|trunk|primary|secondary)$"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});out geom;`;
+ try{const d=await overpass(q);roadsLayer.clearLayers();d.elements.forEach(e=>{if(!e.geometry)return;L.polyline(e.geometry.map(p=>[p.lat,p.lon]),{color:e.tags?.highway==='motorway'?'#d7191c':e.tags?.highway==='trunk'?'#fdae61':'#4575b4',weight:3,opacity:.75}).bindTooltip(e.tags?.ref||e.tags?.name||e.tags?.highway||'Rodovia').addTo(roadsLayer)})}catch(e){console.warn(e)}
+}
+function shopInfo(e){
+ const t=e.tags||{}, name=t.name||'Borracharia / serviço de pneus', phone=t['contact:phone']||t.phone||t['contact:mobile']||'Não informado', hours=t.opening_hours||'Não informado';
+ const [lat,lon]=elementLatLon(e); return {id:e.id,type:e.type,name,phone,hours,lat,lon,url:osmUrl(e),category:t.shop||t.craft||t.amenity||'pneus'};
+}
+async function loadShops(){
+ if(!document.getElementById('shopsChk').checked){shopsLayer.clearLayers();return}
+ if(map.getZoom()<7){shopsLayer.clearLayers();document.getElementById('shopList').innerHTML='<p class="muted">Aproxime o mapa (zoom ≥ 7) para carregar borracharias/pontos de pneus.</p>';return}
+ const b=map.getBounds(), q=`[out:json][timeout:30];(nwr["shop"="tyres"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});nwr["craft"="tyres"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});nwr["amenity"="car_repair"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});nwr["name"~"borracharia|pneus",i](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out center tags;`;
+ try{const d=await overpass(q);shopsLayer.clearLayers();shopCache=d.elements.map(shopInfo).filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lon));
+ shopCache.forEach(s=>L.marker([s.lat,s.lon],{icon:icon('🛞')}).bindPopup(`<b>${esc(s.name)}</b><br>📞 ${esc(s.phone)}<br>🕒 ${esc(s.hours)}<br><a href="${s.url}" target="_blank" rel="noopener">Ver no OpenStreetMap</a>`).addTo(shopsLayer));
+ renderShopList(shopCache);
+ }catch(e){document.getElementById('shopList').innerHTML='<p>Não foi possível consultar o cadastro agora. Tente novamente.</p>'}
+}
+function renderShopList(list){document.getElementById('shopList').innerHTML=list.slice(0,100).map(s=>`<div class="card"><b>🛞 ${esc(s.name)}</b><br>📞 ${esc(s.phone)}<br>🕒 ${esc(s.hours)}<br><a target="_blank" rel="noopener" href="${s.url}">OSM</a></div>`).join('')||'<p>Nenhuma borracharia/ponto de pneus encontrado na área.</p>'}
+
+async function loadHazards(){
+ if(!document.getElementById('hazardsChk').checked){hazardsLayer.clearLayers();return}
+ const b=map.getBounds(), q=`[out:json][timeout:20];nwr["hazard"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});out center tags;`;
+ try{const d=await overpass(q);hazardsLayer.clearLayers();d.elements.forEach(e=>{const p=elementLatLon(e);if(!p[0])return;L.marker(p,{icon:icon('⚠️')}).bindPopup('<b>Perigo OSM</b><br>'+esc(e.tags?.hazard||'hazard')+'<br>'+esc(e.tags?.description||'')).addTo(hazardsLayer)});hazardsLayer.addTo(map)}catch(e){}
+}
+async function loadRestaurants(){
+ if(!document.getElementById('restaurantsChk').checked){restaurantsLayer.clearLayers();return}
+ const b=map.getBounds(), q=`[out:json][timeout:20];nwr["amenity"="restaurant"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});out center tags;`;
+ try{const d=await overpass(q);restaurantsLayer.clearLayers();d.elements.slice(0,500).forEach(e=>{const p=elementLatLon(e);if(!p[0])return;const t=e.tags||{};const price=t['price:range']||t['meal:price']||'Preço não informado';L.marker(p,{icon:icon('🍽️')}).bindPopup(`<b>${esc(t.name||'Restaurante')}</b><br>🍽️ ${esc(price)}<br><a href="${osmUrl(e)}" target="_blank">OSM</a>`).addTo(restaurantsLayer)});restaurantsLayer.addTo(map)}catch(e){}
+}
+async function centerWeather(){
+ weatherLayer.clearLayers(); if(!document.getElementById('weatherChk').checked)return;
+ const c=map.getCenter(),u=new URL(WEATHER);u.searchParams.set('latitude',c.lat);u.searchParams.set('longitude',c.lng);u.searchParams.set('current','temperature_2m,relative_humidity_2m,dew_point_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m');u.searchParams.set('timezone','auto');
+ try{const d=await fetch(u).then(r=>r.json());const x=d.current;L.marker([c.lat,c.lng],{icon:icon('🌦️')}).bindPopup(`<b>Clima no centro do mapa</b><br>🌡️ ${x.temperature_2m} °C<br>💧 UR ${x.relative_humidity_2m}% • Ponto de orvalho ${x.dew_point_2m} °C<br>🌧️ Precipitação ${x.precipitation} mm<br>💨 Vento ${x.wind_speed_10m} km/h • rajadas ${x.wind_gusts_10m} km/h<br>WMO ${x.weather_code}`).addTo(weatherLayer)}catch(e){}
+}
+
+function gpsPosition(options={enableHighAccuracy:true,maximumAge:5000,timeout:15000}){
+ return new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,reject,options));
+}
+function centerOnGps(targetMap, zoom=15){
+ if(!navigator.geolocation)return alert('GPS não está disponível neste dispositivo/navegador.');
+ gpsPosition().then(pos=>{
+   const p=[pos.coords.latitude,pos.coords.longitude];
+   targetMap.setView(p,zoom);
+ }).catch(err=>alert('Não foi possível obter a localização GPS: '+err.message));
+}
+async function reverseGeocode(lat,lon){
+ const u=new URL(NOMINATIM);
+ u.searchParams.set('lat',lat);u.searchParams.set('lon',lon);u.searchParams.set('format','jsonv2');
+ const r=await fetch(u,{headers:{'Accept-Language':'pt-BR'}});
+ if(!r.ok)throw Error('Falha ao identificar sua localização.');
+ return r.json();
+}
+function setAFromGps(){
+ if(!navigator.geolocation)return alert('GPS não está disponível.');
+ gpsPosition().then(async pos=>{
+   document.getElementById('from').value=`${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+   try{
+     const g=await reverseGeocode(pos.coords.latitude,pos.coords.longitude);
+     document.getElementById('from').value=g.display_name||document.getElementById('from').value;
+   }catch(e){}
+   routeMap.setView([pos.coords.latitude,pos.coords.longitude],15);
+ }).catch(err=>alert('Não foi possível obter a localização GPS: '+err.message));
+}
+function stopTrip(){
+ if(tripWatchId!==null){navigator.geolocation.clearWatch(tripWatchId);tripWatchId=null}
+ tripActive=false;
+ document.getElementById('startTripBtn').textContent='▶️ Iniciar trajeto';
+ document.getElementById('tripStatus').textContent='Trajeto parado. A rota permanece no mapa.';
+}
+function startTrip(){
+ if(!lastRoute)return alert('Calcule a rota A → B primeiro.');
+ if(!navigator.geolocation)return alert('GPS não está disponível.');
+ if(tripActive){stopTrip();return}
+ tripActive=true;
+ document.getElementById('startTripBtn').textContent='⏹️ Parar trajeto';
+ document.getElementById('tripStatus').textContent='Trajeto iniciado. O mapa será centralizado na sua posição conforme o GPS atualizar.';
+ tripWatchId=navigator.geolocation.watchPosition(pos=>{
+   const lat=pos.coords.latitude,lon=pos.coords.longitude;
+   if(!tripMarker){
+     tripMarker=L.marker([lat,lon],{icon:icon('📍'),zIndexOffset:1000}).addTo(routeLayer);
+   }else{
+     tripMarker.setLatLng([lat,lon]);
+   }
+   tripMarker.bindPopup(`<b>Minha localização</b><br>Precisão aproximada: ${Math.round(pos.coords.accuracy)} m`);
+   routeMap.setView([lat,lon],Math.max(routeMap.getZoom(),15),{animate:true});
+ },err=>{
+   stopTrip();
+   alert('GPS indisponível durante o trajeto: '+err.message);
+ },{enableHighAccuracy:true,maximumAge:3000,timeout:15000});
+}
+
+const refresh=debounce(()=>{loadRoads();loadShops();loadHazards();loadRestaurants();centerWeather()},900);
+map.on('moveend zoomend',refresh);
+['roadsChk','shopsChk','hazardsChk','restaurantsChk','weatherChk'].forEach(id=>document.getElementById(id).addEventListener('change',refresh));
+
+document.getElementById('searchBtn').onclick=async()=>{try{const x=await geocode(document.getElementById('searchBox').value);map.setView([x.lat,x.lon],13)}catch(e){alert(e.message)}};
+document.getElementById('centerGpsBtn').onclick=()=>centerOnGps(map,15);
+document.getElementById('useGpsMainBtn').onclick=()=>centerOnGps(map,15);
+document.getElementById('findShops').onclick=loadShops;
+document.getElementById('fitBrazil').onclick=()=>map.fitBounds(BR_BOUNDS);
+
+document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active');setTimeout(()=>{map.invalidateSize();routeMap.invalidateSize()},100)});
+
+async function sampleRoute(points,n=18){
+ let out=[]; for(let i=0;i<n;i++){out.push(points[Math.round(i*(points.length-1)/(n-1))])} return out;
+}
+function nearestHourIndex(times,iso){let target=new Date(iso).getTime();let best=0,delta=Infinity;times.forEach((t,i)=>{let d=Math.abs(new Date(t).getTime()-target);if(d<delta){delta=d;best=i}});return best}
+function weatherLabel(code){if(code===0)return 'Céu limpo';if([1,2,3].includes(code))return 'Nublado/parcialmente nublado';if([45,48].includes(code))return 'Neblina';if([51,53,55,56,57].includes(code))return 'Chuvisco';if([61,63,65,66,67,80,81,82].includes(code))return 'Chuva';if([71,73,75,77,85,86].includes(code))return 'Neve';if([95,96,99].includes(code))return 'Trovoada';return 'Condição variável'}
+function risk(x){let r=[];if([95,96,99].includes(x.weather_code))r.push(['danger','Trovoada']);if([61,63,65,80,81,82].includes(x.weather_code))r.push(['warn','Chuva']);if(x.precipitation_probability!=null&&x.precipitation_probability>=70)r.push(['warn','Alta chance de chuva']);if(x.wind_gusts_10m>=60)r.push(['danger','Rajadas fortes']);return r}
+
+async function routeWeather(coords,durationSec){
+ const pts=await sampleRoute(coords,Math.min(24,Math.max(8,Math.ceil(coords.length/50))));
+ const lat=pts.map(p=>p[1]).join(','),lon=pts.map(p=>p[0]).join(',');
+ const u=new URL(WEATHER);u.searchParams.set('latitude',lat);u.searchParams.set('longitude',lon);u.searchParams.set('hourly','temperature_2m,precipitation,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m');u.searchParams.set('forecast_days','2');u.searchParams.set('timezone','auto');
+ const d=await fetch(u).then(r=>r.json()); const arr=Array.isArray(d)?d:[d]; const start=Date.now(), step=durationSec*1000/Math.max(1,pts.length-1);
+ return arr.map((w,i)=>{const eta=new Date(start+i*step);const idx=nearestHourIndex(w.hourly.time,eta.toISOString());return {lat:pts[i][1],lon:pts[i][0],eta,temperature:w.hourly.temperature_2m[idx],precipitation:w.hourly.precipitation[idx],prob:w.hourly.precipitation_probability[idx],code:w.hourly.weather_code[idx],wind:w.hourly.wind_speed_10m[idx],gust:w.hourly.wind_gusts_10m[idx]}}).map(x=>({...x,weather_code:x.code,precipitation_probability:x.prob,risk:risk({weather_code:x.code,precipitation_probability:x.prob,wind_gusts_10m:x.gust}),label:weatherLabel(x.code)}));
+}
+function renderWeather(ws){let alerts=ws.filter(x=>x.risk.length);let html=alerts.length?alerts.map(x=>`<div class="card"><b>📍 ${x.lat.toFixed(3)}, ${x.lon.toFixed(3)}</b><br>🕒 ETA aprox. ${x.eta.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}<br>🌡️ ${x.temperature} °C • 🌧️ ${x.precipitation} mm • chance ${x.precipitation_probability}% • 💨 rajadas ${x.gust} km/h<br>${x.risk.map(r=>`<span class="pill ${r[0]}">${r[1]}</span>`).join('')}</div>`).join(''):'<p class="pill ok">Nenhuma condição de risco derivada foi identificada nos pontos amostrados da rota.</p>';document.getElementById('weatherAlerts').innerHTML=html;
+ ws.forEach(x=>{if(x.risk.length)L.marker([x.lat,x.lon],{icon:icon(x.risk.some(r=>r[0]==='danger')?'⛈️':'🌧️')}).bindPopup(`<b>Condição meteorológica na rota</b><br>${x.label}<br>ETA ${x.eta.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}<br>${x.temperature} °C • chuva ${x.precipitation} mm • chance ${x.precipitation_probability}% • rajadas ${x.gust} km/h`).addTo(routeLayer)})}
+async function shopsAlongRoute(coords){
+ routeShopLayer.clearLayers(); let pts=await sampleRoute(coords,Math.min(10,Math.max(4,Math.ceil(coords.length/100)))); let all=[];
+ for(const p of pts){const lat=p[1],lon=p[0],q=`[out:json][timeout:20];(nwr["shop"="tyres"](around:15000,${lat},${lon});nwr["craft"="tyres"](around:15000,${lat},${lon});nwr["amenity"="car_repair"](around:15000,${lat},${lon});nwr["name"~"borracharia|pneus",i](around:15000,${lat},${lon}););out center tags;`;try{const d=await overpass(q);all=all.concat(d.elements.map(shopInfo))}catch(e){}}
+ const uniq=new Map(all.filter(x=>Number.isFinite(x.lat)&&Number.isFinite(x.lon)).map(x=>[x.type+x.id,x])); const arr=[...uniq.values()]; arr.forEach(s=>L.marker([s.lat,s.lon],{icon:icon('🛞')}).bindPopup(`<b>${esc(s.name)}</b><br>📞 ${esc(s.phone)}<br>🕒 ${esc(s.hours)}<br><a href="${s.url}" target="_blank">OSM</a>`).addTo(routeShopLayer));
+ document.getElementById('routeShops').innerHTML=arr.slice(0,60).map(s=>`<div class="card"><b>🛞 ${esc(s.name)}</b><br>📞 ${esc(s.phone)}<br>🕒 ${esc(s.hours)}</div>`).join('')||'<p>Nenhuma encontrada nos raios consultados.</p>';
+}
+document.getElementById('routeBtn').onclick=async()=>{
+ const a=document.getElementById('from').value.trim();
+ const b=document.getElementById('to').value.trim();
+ if(!a||!b)return alert('Informe os locais A e B.');
+
+ stopTrip();
+ document.getElementById('routeSummary').innerHTML='Calculando rota A → B…';
+ document.getElementById('weatherAlerts').innerHTML='Consultando previsão ao longo da rota…';
+ document.getElementById('routeShops').innerHTML='Consultando borracharias próximas…';
+
+ try{
+   const [A,B]=await Promise.all([geocode(a),geocode(b)]);
+   const u=`${OSRM}/${A.lon},${A.lat};${B.lon},${B.lat}?overview=full&geometries=geojson&steps=true&alternatives=false`;
+   const rr=await fetch(u);
+   if(!rr.ok)throw Error('Serviço de rotas indisponível no momento.');
+   const d=await rr.json();
+   if(d.code!=='Ok'||!d.routes?.length)throw Error('Não foi encontrada uma rota entre A e B.');
+
+   lastRoute=d.routes[0];
+   routeLayer.clearLayers();
+   routeShopLayer.clearLayers();
+   tripMarker=null;
+
+   const line=L.geoJSON(lastRoute.geometry,{style:{color:'#1769aa',weight:6,opacity:.85}}).addTo(routeLayer);
+   L.marker([A.lat,A.lon],{icon:icon('🅰️'),zIndexOffset:500})
+     .bindPopup(`<b>Origem A</b><br>${esc(A.name)}`).addTo(routeLayer);
+   L.marker([B.lat,B.lon],{icon:icon('🅱️'),zIndexOffset:500})
+     .bindPopup(`<b>Destino B</b><br>${esc(B.name)}`).addTo(routeLayer);
+
+   routeMap.fitBounds(line.getBounds(),{padding:[25,25]});
+
+   document.getElementById('routeSummary').innerHTML=
+     `<div class="stat">${fmtKm(lastRoute.distance)}</div>
+      <div>${fmtTime(lastRoute.duration)}</div>
+      <div class="muted">A → B calculada pela malha rodoviária. O tempo é estimado.</div>`;
+   document.getElementById('startTripBtn').disabled=false;
+   document.getElementById('tripStatus').textContent='Rota pronta. Pressione “Iniciar trajeto” para acompanhar sua posição pelo GPS.';
+
+   try{
+     const ws=await routeWeather(lastRoute.geometry.coordinates,lastRoute.duration);
+     renderWeather(ws);
+   }catch(e){
+     document.getElementById('weatherAlerts').innerHTML='<span class="pill warn">Não foi possível carregar a previsão ao longo da rota.</span>';
+   }
+
+   try{
+     await shopsAlongRoute(lastRoute.geometry.coordinates);
+   }catch(e){
+     document.getElementById('routeShops').innerHTML='<span class="pill warn">Não foi possível consultar borracharias agora.</span>';
+   }
+ }catch(e){
+   document.getElementById('startTripBtn').disabled=true;
+   document.getElementById('routeSummary').innerHTML='<span class="pill danger">'+esc(e.message)+'</span>';
+   document.getElementById('tripStatus').textContent='A rota não foi iniciada.';
+ }
+};
+document.getElementById('startTripBtn').onclick=startTrip;
+document.getElementById('centerRouteGpsBtn').onclick=()=>centerOnGps(routeMap,15);
+document.getElementById('useGpsAsABtn').onclick=setAFromGps;
+document.getElementById('swapBtn').onclick=()=>{let a=document.getElementById('from'),b=document.getElementById('to');[a.value,b.value]=[b.value,a.value]};
+document.getElementById('routeClear').onclick=()=>{
+ stopTrip();
+ routeLayer.clearLayers();
+ routeShopLayer.clearLayers();
+ lastRoute=null;
+ tripMarker=null;
+ document.getElementById('startTripBtn').disabled=true;
+ document.getElementById('routeSummary').innerHTML='<span class="muted">Informe origem e destino para calcular.</span>';
+ document.getElementById('weatherAlerts').innerHTML='Ainda não calculado.';
+ document.getElementById('routeShops').innerHTML='Será preenchido após a rota.';
+ document.getElementById('tripStatus').textContent='Calcule a rota para habilitar o início do trajeto.';
+};
+
+refresh();
+</script>
+</body>
+</html>
